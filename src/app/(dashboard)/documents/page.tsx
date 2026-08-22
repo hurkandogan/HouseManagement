@@ -231,7 +231,7 @@ export default function DocumentsPage() {
                         <>
                           <Upload className="w-8 h-8 text-zinc-500 mb-2" />
                           <p className="mb-2 text-sm text-zinc-400"><span className="font-semibold text-indigo-400">Click to upload</span> or drag and drop</p>
-                          <p className="text-xs text-zinc-500">PDF, PNG, JPG or WEBP (MAX. 10MB)</p>
+                          <p className="text-xs text-zinc-500">PDF, PNG, JPG or WEBP (MAX. 100MB)</p>
                         </>
                       )}
                     </div>

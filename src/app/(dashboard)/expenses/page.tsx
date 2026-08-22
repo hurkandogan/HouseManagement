@@ -435,12 +435,11 @@ export default function ExpensesPage() {
           </div>
 
           <Dialog open={open} onOpenChange={handleOpenChange}>
-            {/* @ts-expect-error asChild is valid in radix */}
-          <DialogTrigger asChild>
-              <Button className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-[0_0_15px_rgba(79,70,229,0.3)] transition-all">
-                <Plus className="mr-2 h-4 w-4" /> Add Expense
-              </Button>
-            </DialogTrigger>
+          <DialogTrigger render={
+            <Button className="bg-indigo-600 hover:bg-indigo-500 text-white shadow-[0_0_15px_rgba(79,70,229,0.3)] transition-all">
+              <Plus className="mr-2 h-4 w-4" /> Add Expense
+            </Button>
+          } />
           <DialogContent className="sm:max-w-[550px] bg-zinc-950/95 backdrop-blur-xl border-white/10 text-zinc-100 shadow-2xl overflow-visible">
             <DialogHeader>
               <DialogTitle className="text-xl">{editingId ? "Edit Expense" : "Record Expense"}</DialogTitle>
@@ -495,7 +494,7 @@ export default function ExpensesPage() {
                   <Label className="text-zinc-300 font-medium mt-0.5">Date</Label>
                   <Popover>
                     {/* @ts-expect-error asChild is valid in radix */}
-                    <PopoverTrigger asChild>
+                    <PopoverTrigger render={
                       <Button
                         variant={"outline"}
                         className={cn(
@@ -506,7 +505,7 @@ export default function ExpensesPage() {
                         <CalendarIcon className="mr-2 h-4 w-4 text-zinc-400" />
                         {date ? format(date, "dd.MM.yyyy") : <span>Pick a date</span>}
                       </Button>
-                    </PopoverTrigger>
+                    } />
                     <PopoverContent className="w-auto p-0 bg-zinc-950 border-white/10" align="start">
                       <Calendar
                         mode="single"
@@ -645,7 +644,7 @@ export default function ExpensesPage() {
                         <>
                           <Upload className="w-8 h-8 text-zinc-500 mb-2" />
                           <p className="mb-2 text-sm text-zinc-400"><span className="font-semibold text-indigo-400">Click to upload</span> or drag and drop</p>
-                          <p className="text-xs text-zinc-500">PDF, PNG, JPG or WEBP (MAX. 10MB)</p>
+                          <p className="text-xs text-zinc-500">PDF, PNG, JPG or WEBP (MAX. 100MB)</p>
                         </>
                       )}
                     </div>

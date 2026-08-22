@@ -1,6 +1,7 @@
 "use server";
 
 import { adminDb, adminStorage } from "@/lib/firebase/admin";
+import { getDownloadURL } from "firebase-admin/storage";
 
 export type Contract = {
   id: string;
@@ -57,8 +58,7 @@ export async function createContract(formData: FormData) {
         }
       });
       
-      await storageFile.makePublic();
-      documentUrl = `https://storage.googleapis.com/${adminStorage.name}/${filePath}`;
+      documentUrl = await getDownloadURL(storageFile);
     }
 
     const contractData: Omit<Contract, "id" | "createdAt"> = {
@@ -114,8 +114,7 @@ export async function updateContract(id: string, formData: FormData, oldDocument
         }
       });
       
-      await storageFile.makePublic();
-      documentUrl = `https://storage.googleapis.com/${adminStorage.name}/${filePath}`;
+      documentUrl = await getDownloadURL(storageFile);
 
       if (oldDocumentUrl) {
         const urlObj = new URL(oldDocumentUrl);
@@ -169,8 +168,7 @@ export async function cancelContract(id: string, documentUrl: string | null) {
         
         try {
           await adminStorage.file(oldFilePath).move(newFilePath);
-          await adminStorage.file(newFilePath).makePublic();
-          newDocumentUrl = `https://storage.googleapis.com/${adminStorage.name}/${newFilePath}`;
+          newDocumentUrl = await getDownloadURL(adminStorage.file(newFilePath));
         } catch (storageError) {
           console.error("Error moving file to cancelled folder:", storageError);
           // If move fails, we just keep the old url, but still mark as canceled

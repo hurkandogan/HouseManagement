@@ -1,6 +1,7 @@
 "use server";
 
 import { adminDb, adminStorage } from "@/lib/firebase/admin";
+import { getDownloadURL } from "firebase-admin/storage";
 
 export type Expense = {
   id: string;
@@ -58,8 +59,9 @@ export async function createExpense(formData: FormData) {
       });
       
       // Make it public
-      await storageFile.makePublic();
-      documentUrl = `https://storage.googleapis.com/${adminStorage.name}/${filePath}`;
+      // Note: We don't use makePublic() because it fails on buckets with uniform bucket-level access enabled.
+      // Instead, we use getDownloadURL which generates a Firebase Storage URL.
+      documentUrl = await getDownloadURL(storageFile);
     }
 
     const expenseData: Omit<Expense, "id" | "createdAt"> = {
@@ -128,8 +130,8 @@ export async function updateExpense(id: string, formData: FormData, oldDocumentU
         }
       });
       
-      await storageFile.makePublic();
-      documentUrl = `https://storage.googleapis.com/${adminStorage.name}/${filePath}`;
+      // We don't use makePublic() because it fails on buckets with uniform bucket-level access enabled.
+      documentUrl = await getDownloadURL(storageFile);
 
       // Delete the old file if it exists
       if (oldDocumentUrl) {

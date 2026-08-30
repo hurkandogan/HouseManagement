@@ -34,13 +34,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { useToast } from "@/lib/contexts/ToastContext";
 
 export default function PropertiesPage() {
+  const { showToast } = useToast();
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [propertyToDelete, setPropertyToDelete] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   // Form states
   const [name, setName] = useState("");
@@ -64,6 +67,7 @@ export default function PropertiesPage() {
     setType("building");
     setParentId("none");
     setEditingId(null);
+    setIsSubmitting(false);
   };
 
   const handleOpenChange = (newOpen: boolean) => {
@@ -84,34 +88,56 @@ export default function PropertiesPage() {
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
-    const payload = {
-      name,
-      address,
-      type,
-      parentId: parentId === "none" ? null : parentId
-    };
-
-    let res;
-    if (editingId) {
-      res = await updateProperty(editingId, payload);
-    } else {
-      res = await createProperty(payload);
+    if (!name.trim()) {
+      showToast("Please enter a property name.", "error");
+      return;
     }
-    
-    if (res.success) {
-      setOpen(false);
-      resetForm();
-      loadProperties();
-    } else {
-      alert(res.error);
+
+    try {
+      setIsSubmitting(true);
+      const payload = {
+        name: name.trim(),
+        address: address.trim(),
+        type,
+        parentId: parentId === "none" ? null : parentId
+      };
+
+      let res;
+      if (editingId) {
+        res = await updateProperty(editingId, payload);
+      } else {
+        res = await createProperty(payload);
+      }
+      
+      if (res.success) {
+        showToast(editingId ? "Property updated successfully" : "Property created successfully", "success");
+        setOpen(false);
+        resetForm();
+        loadProperties();
+      } else {
+        showToast(res.error || "Failed to save property", "error");
+      }
+    } catch (err: any) {
+      showToast(err?.message || "An error occurred while saving property", "error");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const executeDelete = async () => {
     if (propertyToDelete) {
-      await deleteProperty(propertyToDelete);
-      setPropertyToDelete(null);
-      loadProperties();
+      try {
+        const res = await deleteProperty(propertyToDelete);
+        if (res.success) {
+          showToast("Property deleted successfully", "success");
+          setPropertyToDelete(null);
+          loadProperties();
+        } else {
+          showToast(res.error || "Failed to delete property", "error");
+        }
+      } catch (err: any) {
+        showToast(err?.message || "Error deleting property", "error");
+      }
     }
   };
 

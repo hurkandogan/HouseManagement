@@ -33,7 +33,8 @@ import {
 } from "@/components/ui/dialog";
 import { Card } from "@/components/ui/card";
 import { format } from "date-fns";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency, parseDDMMYYYY, formatDateDDMMYYYY } from "@/lib/utils";
+import { useToast } from "@/lib/contexts/ToastContext";
 import { Plus, Receipt, FileSignature, MapPin, Loader2, FileText, Upload, CalendarIcon, ExternalLink, Edit2, Ban, History, ArrowRight, Link as LinkIcon } from "lucide-react";
 import {
   AlertDialog,
@@ -49,6 +50,7 @@ import {
 import { useRouter } from "next/navigation";
 
 export default function ContractsPage() {
+  const { showToast } = useToast();
   const router = useRouter();
   const [contracts, setContracts] = useState<Contract[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
@@ -72,8 +74,8 @@ export default function ContractsPage() {
   const [provider, setProvider] = useState("");
   const [contractNumber, setContractNumber] = useState("");
   const [category, setCategory] = useState<string>("");
-  const [startDate, setStartDate] = useState<Date>(new Date());
-  const [endDate, setEndDate] = useState<Date | undefined>(undefined);
+  const [startDateStr, setStartDateStr] = useState(formatDateDDMMYYYY(new Date()));
+  const [endDateStr, setEndDateStr] = useState("");
   const [file, setFile] = useState<File | null>(null);
 
   const loadData = async () => {
@@ -101,12 +103,13 @@ export default function ContractsPage() {
     setProvider("");
     setContractNumber("");
     setCategory("");
-    setStartDate(new Date());
-    setEndDate(undefined);
+    setStartDateStr(formatDateDDMMYYYY(new Date()));
+    setEndDateStr("");
     setFile(null);
     setEditingId(null);
     setOldDocumentUrl(null);
     setOldFileName(null);
+    setIsSubmitting(false);
   };
 
   const handleOpenChange = (newOpen: boolean) => {
@@ -120,8 +123,8 @@ export default function ContractsPage() {
     setProvider(c.provider);
     setContractNumber(c.contractNumber);
     setCategory(c.category);
-    setStartDate(new Date(c.startDate));
-    setEndDate(c.endDate ? new Date(c.endDate) : undefined);
+    setStartDateStr(formatDateDDMMYYYY(c.startDate));
+    setEndDateStr(c.endDate ? formatDateDDMMYYYY(c.endDate) : "");
     setEditingId(c.id);
     setOldDocumentUrl(c.documentUrl);
     setOldFileName(c.fileName);
@@ -131,41 +134,76 @@ export default function ContractsPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    setIsSubmitting(true);
-    const formData = new FormData();
-    formData.append("propertyId", propertyId);
-    formData.append("title", title);
-    formData.append("provider", provider);
-    formData.append("contractNumber", contractNumber);
-    formData.append("category", category);
-    formData.append("startDate", startDate.toISOString());
-    if (endDate) formData.append("endDate", endDate.toISOString());
-    if (file) formData.append("file", file);
-    if (oldFileName) formData.append("oldFileName", oldFileName);
-
-    let res;
-    if (editingId) {
-      formData.append("status", "active"); // edit implies active usually, or preserve it
-      res = await updateContract(editingId, formData, oldDocumentUrl);
-    } else {
-      res = await createContract(formData);
+    if (!propertyId) {
+      showToast("Please select a property.", "error");
+      return;
     }
 
-    setIsSubmitting(false);
-    if (res.success) {
-      setOpen(false);
-      resetForm();
-      loadData();
-    } else {
-      alert("Error saving contract");
+    const parsedStart = parseDDMMYYYY(startDateStr);
+    if (!parsedStart) {
+      showToast("Invalid Start Date format. Please use DD.MM.YYYY (e.g. 01.01.2026)", "error");
+      return;
+    }
+
+    let parsedEnd: Date | null = null;
+    if (endDateStr.trim()) {
+      parsedEnd = parseDDMMYYYY(endDateStr);
+      if (!parsedEnd) {
+        showToast("Invalid End Date format. Please use DD.MM.YYYY (e.g. 31.12.2026)", "error");
+        return;
+      }
+    }
+
+    try {
+      setIsSubmitting(true);
+      const formData = new FormData();
+      formData.append("propertyId", propertyId);
+      formData.append("title", title);
+      formData.append("provider", provider);
+      formData.append("contractNumber", contractNumber);
+      formData.append("category", category);
+      formData.append("startDate", parsedStart.toISOString());
+      if (parsedEnd) formData.append("endDate", parsedEnd.toISOString());
+      if (file) formData.append("file", file);
+      if (oldFileName) formData.append("oldFileName", oldFileName);
+
+      let res;
+      if (editingId) {
+        formData.append("status", "active");
+        res = await updateContract(editingId, formData, oldDocumentUrl);
+      } else {
+        res = await createContract(formData);
+      }
+
+      if (res.success) {
+        showToast(editingId ? "Contract updated successfully" : "Contract created successfully", "success");
+        setOpen(false);
+        resetForm();
+        loadData();
+      } else {
+        showToast(res.error || "Failed to save contract", "error");
+      }
+    } catch (err: any) {
+      showToast(err?.message || "An error occurred while saving the contract", "error");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const executeCancel = async () => {
     if (contractToCancel) {
-      await cancelContract(contractToCancel.id, contractToCancel.documentUrl);
-      setContractToCancel(null);
-      loadData();
+      try {
+        const res = await cancelContract(contractToCancel.id, contractToCancel.documentUrl);
+        if (res.success) {
+          showToast("Contract cancelled successfully", "success");
+          setContractToCancel(null);
+          loadData();
+        } else {
+          showToast(res.error || "Failed to cancel contract", "error");
+        }
+      } catch (err: any) {
+        showToast(err?.message || "Error cancelling contract", "error");
+      }
     }
   };
 
@@ -258,46 +296,33 @@ export default function ContractsPage() {
                   </div>
 
                   <div className="space-y-2 flex flex-col">
-                    <Label className="text-zinc-300 font-medium mt-0.5">Start Date</Label>
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button variant="outline" className={cn("w-full h-11 justify-start text-left font-normal bg-zinc-900 border-zinc-800 text-zinc-100 rounded-lg", !startDate && "text-muted-foreground")}>
-                          <CalendarIcon className="mr-2 h-4 w-4 text-zinc-400" />
-                          {startDate ? format(startDate, "dd.MM.yyyy") : <span>Pick a date</span>}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0 bg-zinc-950 border-white/10" align="start">
-                        <Calendar mode="single" selected={startDate} onSelect={(day) => day && setStartDate(day)} initialFocus className="text-white" />
-                      </PopoverContent>
-                    </Popover>
+                    <Label htmlFor="start-date" className="text-zinc-300 font-medium">Start Date (DD.MM.YYYY)</Label>
+                    <div className="relative">
+                      <CalendarIcon className="absolute left-3.5 top-3.5 h-4 w-4 text-zinc-500" />
+                      <Input
+                        id="start-date"
+                        type="text"
+                        value={startDateStr}
+                        onChange={(e) => setStartDateStr(e.target.value)}
+                        placeholder="DD.MM.YYYY (e.g. 01.01.2026)"
+                        required
+                        className="bg-zinc-900 border-zinc-800 focus-visible:ring-indigo-500 text-zinc-100 pl-9 placeholder:text-zinc-600 rounded-lg h-11"
+                      />
+                    </div>
                   </div>
 
                   <div className="space-y-2 flex flex-col">
-                    <Label className="text-zinc-300 font-medium mt-0.5">End Date (Optional)</Label>
-                    <div className="flex items-center gap-2">
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" className={cn("w-full h-11 justify-start text-left font-normal bg-zinc-900 border-zinc-800 text-zinc-100 rounded-lg", !endDate && "text-muted-foreground")}>
-                            <CalendarIcon className="mr-2 h-4 w-4 text-zinc-400" />
-                            {endDate ? format(endDate, "dd.MM.yyyy") : <span>Auto-renews</span>}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0 bg-zinc-950 border-white/10" align="start">
-                          <Calendar mode="single" selected={endDate} onSelect={setEndDate} initialFocus className="text-white" />
-                        </PopoverContent>
-                      </Popover>
-                      {endDate && (
-                        <Button 
-                          type="button"
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-11 w-11 text-zinc-500 hover:text-red-400 hover:bg-red-400/10 shrink-0 border border-transparent"
-                          onClick={() => setEndDate(undefined)}
-                          title="Clear date (Auto-renews)"
-                        >
-                          <Ban className="h-4 w-4" />
-                        </Button>
-                      )}
+                    <Label htmlFor="end-date" className="text-zinc-300 font-medium">End Date (Optional)</Label>
+                    <div className="relative">
+                      <CalendarIcon className="absolute left-3.5 top-3.5 h-4 w-4 text-zinc-500" />
+                      <Input
+                        id="end-date"
+                        type="text"
+                        value={endDateStr}
+                        onChange={(e) => setEndDateStr(e.target.value)}
+                        placeholder="Auto-renews or DD.MM.YYYY"
+                        className="bg-zinc-900 border-zinc-800 focus-visible:ring-indigo-500 text-zinc-100 pl-9 placeholder:text-zinc-600 rounded-lg h-11"
+                      />
                     </div>
                   </div>
                 </div>
@@ -459,7 +484,7 @@ export default function ContractsPage() {
                                         </div>
                                       </div>
                                       <div className="flex items-center gap-6">
-                                        <p className="text-sm font-bold text-zinc-100">€ {exp.amount.toFixed(2)}</p>
+                                        <p className="text-sm font-bold text-zinc-100">{formatCurrency(exp.amount)}</p>
                                         {exp.documentUrl && (
                                           <a href={exp.documentUrl} target="_blank" rel="noreferrer" className="text-indigo-400 hover:text-indigo-300">
                                             <FileText className="w-4 h-4" />

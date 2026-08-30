@@ -21,6 +21,7 @@ import { format } from "date-fns";
 import { storage } from "@/lib/firebase/client";
 import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { useYear } from "@/lib/contexts/YearContext";
+import { useToast } from "@/lib/contexts/ToastContext";
 import { 
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle 
@@ -28,6 +29,7 @@ import {
 
 export default function DocumentsPage() {
   const { selectedYear } = useYear();
+  const { showToast } = useToast();
   const [documents, setDocuments] = useState<Document[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,6 +50,7 @@ export default function DocumentsPage() {
     setTitle("");
     setPropertyId("general");
     setFile(null);
+    setUploading(false);
   };
 
   const handleOpenChange = (newOpen: boolean) => {
@@ -83,7 +86,10 @@ export default function DocumentsPage() {
 
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!file || !title) return;
+    if (!file || !title) {
+      showToast("Please select a file and enter a title.", "error");
+      return;
+    }
 
     setUploading(true);
     try {
@@ -103,12 +109,13 @@ export default function DocumentsPage() {
         size: file.size
       });
 
+      showToast("Document uploaded successfully", "success");
       setOpen(false);
       resetForm();
       loadData();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Upload failed", error);
-      alert("Failed to upload document");
+      showToast(error?.message || "Failed to upload document", "error");
     } finally {
       setUploading(false);
     }
@@ -118,14 +125,12 @@ export default function DocumentsPage() {
     if (!docToDelete) return;
     
     try {
-      // Try to delete from storage first if we can guess the path, 
-      // but Firebase storage URL makes it hard to extract exactly without parsing.
-      // Usually, we just delete the doc and optionally let a Cloud Function clean up storage.
-      // For now, we will just delete the DB record to avoid breaking if storage delete fails.
       await deleteDocument(docToDelete.id);
+      showToast("Document deleted successfully", "success");
       loadData();
-    } catch (error) {
+    } catch (error: any) {
       console.error(error);
+      showToast(error?.message || "Failed to delete document", "error");
     } finally {
       setDocToDelete(null);
     }

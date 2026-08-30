@@ -2,6 +2,7 @@
 
 import { adminDb, adminStorage } from "@/lib/firebase/admin";
 import { getDownloadURL } from "firebase-admin/storage";
+import { appendExpenseToGoogleSheet } from "@/lib/googleSheets";
 
 export type Expense = {
   id: string;
@@ -93,6 +94,20 @@ export async function createExpense(formData: FormData) {
       createdAt: new Date().toISOString()
     });
 
+    // Automatically sync with Google Sheet
+    try {
+      await appendExpenseToGoogleSheet({
+        propertyId,
+        date,
+        vendor,
+        title,
+        amount,
+        documentUrl,
+      });
+    } catch (sheetErr) {
+      console.error("Failed to sync expense to Google Sheet:", sheetErr);
+    }
+
     return { success: true, id: docRef.id };
   } catch (error) {
     console.error("Error creating expense:", error);
@@ -168,6 +183,20 @@ export async function updateExpense(id: string, formData: FormData, oldDocumentU
     }
 
     await adminDb.collection("expenses").doc(id).update(expenseData);
+
+    // Automatically sync updated expense to Google Sheet as well
+    try {
+      await appendExpenseToGoogleSheet({
+        propertyId,
+        date,
+        vendor,
+        title,
+        amount,
+        documentUrl,
+      });
+    } catch (sheetErr) {
+      console.error("Failed to sync updated expense to Google Sheet:", sheetErr);
+    }
 
     return { success: true };
   } catch (error) {

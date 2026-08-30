@@ -3,6 +3,7 @@ import { Outfit } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/contexts/AuthContext";
 import { YearProvider } from "@/lib/contexts/YearContext";
+import { ToastProvider } from "@/lib/contexts/ToastContext";
 import ProtectedRoute from "@/components/ProtectedRoute";
 
 const outfit = Outfit({
@@ -25,13 +26,15 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${outfit.variable} h-full antialiased dark`}
     >
       <body className="min-h-full flex flex-col bg-background text-foreground">
-        <AuthProvider>
-          <YearProvider>
-            <ProtectedRoute>
-              {children}
-            </ProtectedRoute>
-          </YearProvider>
-        </AuthProvider>
+        <ToastProvider>
+          <AuthProvider>
+            <YearProvider>
+              <ProtectedRoute>
+                {children}
+              </ProtectedRoute>
+            </YearProvider>
+          </AuthProvider>
+        </ToastProvider>
       </body>
     </html>
   );

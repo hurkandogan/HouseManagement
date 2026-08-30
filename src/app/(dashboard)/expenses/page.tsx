@@ -14,7 +14,8 @@ import { format } from "date-fns";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { useYear } from "@/lib/contexts/YearContext";
-import { cn } from "@/lib/utils";
+import { useToast } from "@/lib/contexts/ToastContext";
+import { cn, formatCurrency, parseDDMMYYYY, formatDateDDMMYYYY } from "@/lib/utils";
 import { Calendar } from "@/components/ui/calendar";
 import {
   Popover,
@@ -50,6 +51,7 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export default function ExpensesPage() {
+  const { showToast } = useToast();
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [properties, setProperties] = useState<Property[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -79,7 +81,7 @@ export default function ExpensesPage() {
   const [title, setTitle] = useState("");
   const [vendor, setVendor] = useState("");
   const [amount, setAmount] = useState("");
-  const [date, setDate] = useState<Date>(new Date());
+  const [dateStr, setDateStr] = useState(formatDateDDMMYYYY(new Date()));
   const [propertyId, setPropertyId] = useState<string>("");
   const [category, setCategory] = useState<string>("");
   const [file, setFile] = useState<File | null>(null);
@@ -135,16 +137,16 @@ export default function ExpensesPage() {
     setTitle("");
     setVendor("");
     setAmount("");
-    setDate(new Date());
+    setDateStr(formatDateDDMMYYYY(new Date()));
     setPropertyId("");
     setCategory("");
     setFile(null);
     setTags([]);
     setEditingId(null);
     setOldDocumentUrl(null);
-    setOldFileName(null);
     setTagInput("");
     setContractId(null);
+    setIsSubmitting(false);
   };
 
   const handleOpenChange = (newOpen: boolean) => {
@@ -156,7 +158,7 @@ export default function ExpensesPage() {
     setTitle(expense.title);
     setVendor(expense.vendor || "");
     setAmount(expense.amount.toString());
-    setDate(new Date(expense.date));
+    setDateStr(formatDateDDMMYYYY(expense.date));
     setPropertyId(expense.propertyId);
     setCategory(expense.category);
     setTags(expense.tags || []);
@@ -171,55 +173,74 @@ export default function ExpensesPage() {
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!propertyId) {
-      alert("Please select a property.");
+      showToast("Please select a property.", "error");
       return;
     }
 
-    setIsSubmitting(true);
-    const formData = new FormData();
-    formData.append("title", title);
-    formData.append("amount", amount);
-    // Important: we store ISO string in DB for correct sorting/fetching
-    formData.append("date", date.toISOString());
-    formData.append("propertyId", propertyId);
-    formData.append("category", category);
-    if (vendor.trim()) formData.append("vendor", vendor.trim());
-    formData.append("tags", JSON.stringify(tags));
-    
-    if (contractId) {
-      formData.append("contractId", contractId);
+    const parsedDate = parseDDMMYYYY(dateStr);
+    if (!parsedDate) {
+      showToast("Invalid date format. Please use DD.MM.YYYY (e.g. 30.08.2026)", "error");
+      return;
     }
 
-    if (file) {
-      formData.append("file", file);
-    }
-    if (oldFileName) {
-      formData.append("oldFileName", oldFileName);
-    }
+    try {
+      setIsSubmitting(true);
+      const formData = new FormData();
+      formData.append("title", title);
+      formData.append("amount", amount);
+      formData.append("date", parsedDate.toISOString());
+      formData.append("propertyId", propertyId);
+      formData.append("category", category);
+      if (vendor.trim()) formData.append("vendor", vendor.trim());
+      formData.append("tags", JSON.stringify(tags));
+      
+      if (contractId) {
+        formData.append("contractId", contractId);
+      }
 
-    let res;
-    if (editingId) {
-      res = await updateExpense(editingId, formData, oldDocumentUrl);
-    } else {
-      res = await createExpense(formData);
-    }
-    
-    setIsSubmitting(false);
-    
-    if (res.success) {
-      setOpen(false);
-      resetForm();
-      loadData();
-    } else {
-      alert(res.error);
+      if (file) {
+        formData.append("file", file);
+      }
+      if (oldFileName) {
+        formData.append("oldFileName", oldFileName);
+      }
+
+      let res;
+      if (editingId) {
+        res = await updateExpense(editingId, formData, oldDocumentUrl);
+      } else {
+        res = await createExpense(formData);
+      }
+      
+      if (res.success) {
+        showToast(editingId ? "Expense updated successfully" : "Expense created successfully", "success");
+        setOpen(false);
+        resetForm();
+        loadData();
+      } else {
+        showToast(res.error || "Failed to save expense", "error");
+      }
+    } catch (err: any) {
+      showToast(err?.message || "An error occurred while saving the expense", "error");
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
   const executeDelete = async () => {
     if (expenseToDelete) {
-      await deleteExpense(expenseToDelete.id);
-      setExpenseToDelete(null);
-      loadData();
+      try {
+        const res = await deleteExpense(expenseToDelete.id);
+        if (res.success) {
+          showToast("Expense archived successfully", "success");
+          setExpenseToDelete(null);
+          loadData();
+        } else {
+          showToast(res.error || "Failed to archive expense", "error");
+        }
+      } catch (err: any) {
+        showToast(err?.message || "Error archiving expense", "error");
+      }
     }
   };
 
@@ -317,7 +338,7 @@ export default function ExpensesPage() {
       return;
     }
     
-    const headers = ["Date", "Expense", "Vendor", "Property", "Category", "Amount"];
+    const headers = ["Date", "Expense", "Vendor", "Property", "Category", "Amount", "Document Link"];
     const rows = visibleExpenses.map(e => {
       const property = properties.find(p => p.id === e.propertyId)?.name || "Unknown";
       const cat = categories.find(c => c.value === e.category)?.label || e.category;
@@ -327,7 +348,8 @@ export default function ExpensesPage() {
         `"${e.vendor ? e.vendor.replace(/"/g, '""') : ""}"`,
         `"${property.replace(/"/g, '""')}"`,
         `"${cat.replace(/"/g, '""')}"`,
-        e.amount.toFixed(2)
+        e.amount.toFixed(2),
+        `"${e.documentUrl ? e.documentUrl.replace(/"/g, '""') : ""}"`
       ].join(",");
     });
     
@@ -349,22 +371,22 @@ export default function ExpensesPage() {
       return;
     }
 
-    const doc = new jsPDF();
+    const doc = new jsPDF({ orientation: "landscape" });
     
     // Title
-    doc.setFontSize(20);
+    doc.setFontSize(18);
     doc.setTextColor(40, 40, 40);
-    doc.text(`Expense Report - ${selectedYear}`, 14, 22);
+    doc.text(`Expense Report - ${selectedYear}`, 14, 18);
     
     // Subtitle / Filters
-    doc.setFontSize(10);
+    doc.setFontSize(9);
     doc.setTextColor(100, 100, 100);
     let filterText = `Property: ${filterProperty === "all" ? "All" : properties.find(p => p.id === filterProperty)?.name || filterProperty}`;
     filterText += ` | Category: ${filterCategory === "all" ? "All" : categories.find(c => c.value === filterCategory)?.label || filterCategory}`;
     if (filterTag !== "all") filterText += ` | Tag: ${availableTags.find(t => t.value === filterTag)?.label || filterTag}`;
     if (filterMonth !== "all") filterText += ` | Month: ${months[parseInt(filterMonth)]}`;
     
-    doc.text(filterText, 14, 30);
+    doc.text(filterText, 14, 25);
 
     const tableData = visibleExpenses.map(e => {
       const property = properties.find(p => p.id === e.propertyId)?.name || "Unknown";
@@ -375,25 +397,28 @@ export default function ExpensesPage() {
         e.vendor || "-",
         property,
         cat,
-        `€ ${e.amount.toFixed(2)}`
+        formatCurrency(e.amount),
+        e.documentUrl || "-"
       ];
     });
 
     // Add total row
     tableData.push([
       { content: "Total:", colSpan: 5, styles: { halign: 'right', fontStyle: 'bold', fillColor: [240, 240, 240] } } as any,
-      { content: `€ ${totalAmount.toFixed(2)}`, styles: { fontStyle: 'bold', fillColor: [240, 240, 240] } } as any
+      { content: formatCurrency(totalAmount), styles: { fontStyle: 'bold', fillColor: [240, 240, 240] } } as any,
+      { content: "", styles: { fillColor: [240, 240, 240] } } as any
     ]);
 
     autoTable(doc, {
-      startY: 35,
-      head: [["Date", "Expense", "Vendor", "Property", "Category", "Amount"]],
+      startY: 30,
+      head: [["Date", "Expense", "Vendor", "Property", "Category", "Amount", "Document Link"]],
       body: tableData,
       theme: 'grid',
       headStyles: { fillColor: [79, 70, 229], textColor: 255 },
-      styles: { fontSize: 9, cellPadding: 4 },
+      styles: { fontSize: 8, cellPadding: 3 },
       columnStyles: {
-        5: { halign: 'right' }
+        5: { halign: 'right' },
+        6: { cellWidth: 60 }
       }
     });
 
@@ -491,30 +516,19 @@ export default function ExpensesPage() {
                 </div>
 
                 <div className="space-y-2 flex flex-col">
-                  <Label className="text-zinc-300 font-medium mt-0.5">Date</Label>
-                  <Popover>
-                    {/* @ts-expect-error asChild is valid in radix */}
-                    <PopoverTrigger render={
-                      <Button
-                        variant={"outline"}
-                        className={cn(
-                          "w-full h-11 justify-start text-left font-normal bg-zinc-900 border-zinc-800 hover:bg-zinc-800 hover:text-white text-zinc-100 rounded-lg",
-                          !date && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4 text-zinc-400" />
-                        {date ? format(date, "dd.MM.yyyy") : <span>Pick a date</span>}
-                      </Button>
-                    } />
-                    <PopoverContent className="w-auto p-0 bg-zinc-950 border-white/10" align="start">
-                      <Calendar
-                        mode="single"
-                        selected={date}
-                        onSelect={(day) => day && setDate(day)}
-                        className="text-white"
-                      />
-                    </PopoverContent>
-                  </Popover>
+                  <Label htmlFor="expense-date" className="text-zinc-300 font-medium">Date (DD.MM.YYYY)</Label>
+                  <div className="relative">
+                    <CalendarIcon className="absolute left-3.5 top-3.5 h-4 w-4 text-zinc-500" />
+                    <Input
+                      id="expense-date"
+                      type="text"
+                      value={dateStr}
+                      onChange={(e) => setDateStr(e.target.value)}
+                      placeholder="DD.MM.YYYY (e.g. 30.08.2026)"
+                      required
+                      className="bg-zinc-900 border-zinc-800 focus-visible:ring-indigo-500 focus-visible:ring-offset-0 focus-visible:border-indigo-500 text-zinc-100 pl-9 placeholder:text-zinc-600 rounded-lg h-11"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -767,7 +781,7 @@ export default function ExpensesPage() {
         
         <div className="bg-indigo-500/10 border border-indigo-500/20 rounded-lg px-4 py-2.5 flex flex-col justify-center min-w-[150px]">
           <span className="text-xs font-medium text-indigo-400 mb-0.5">Total Filtered</span>
-          <span className="text-lg font-bold text-indigo-100">€ {totalAmount.toFixed(2)}</span>
+          <span className="text-lg font-bold text-indigo-100">{formatCurrency(totalAmount)}</span>
         </div>
       </Card>
 
@@ -867,7 +881,7 @@ export default function ExpensesPage() {
                         </div>
                       </td>
                       <td className="px-6 py-3 align-middle text-right font-semibold text-zinc-100 whitespace-nowrap">
-                        € {expense.amount.toFixed(2)}
+                        {formatCurrency(expense.amount)}
                       </td>
                       <td className="px-6 py-3 align-middle text-center">
                         {expense.documentUrl ? (

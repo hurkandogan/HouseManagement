@@ -15,7 +15,7 @@ import {
   Receipt, FileText, TrendingUp, Calendar, AlertCircle, Folder, Download
 } from "lucide-react";
 import { format } from "date-fns";
-import { cn } from "@/lib/utils";
+import { cn, formatCurrency } from "@/lib/utils";
 
 export default function PropertyDashboardPage() {
   const params = useParams();
@@ -149,7 +149,7 @@ export default function PropertyDashboardPage() {
           </div>
           <div>
             <p className="text-zinc-400 font-medium mb-1">Total Expenses ({selectedYear})</p>
-            <h3 className="text-4xl font-bold text-white tracking-tight">€ {totalExpenses.toFixed(2)}</h3>
+            <h3 className="text-4xl font-bold text-white tracking-tight">{formatCurrency(totalExpenses)}</h3>
           </div>
           <div className="mt-4 flex items-center text-xs text-indigo-300 font-medium">
             <Receipt className="h-4 w-4 mr-1.5" />
@@ -197,7 +197,7 @@ export default function PropertyDashboardPage() {
                     <div key={item.val} className="space-y-2">
                       <div className="flex justify-between items-end text-sm">
                         <span className="font-medium text-zinc-300">{item.label}</span>
-                        <span className="font-bold text-white">€ {item.sum.toFixed(2)}</span>
+                        <span className="font-bold text-white">{formatCurrency(item.sum)}</span>
                       </div>
                       <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden">
                         <div 
@@ -258,7 +258,7 @@ export default function PropertyDashboardPage() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <p className="font-bold text-white">€ {expense.amount.toFixed(2)}</p>
+                      <p className="font-bold text-white">{formatCurrency(expense.amount)}</p>
                       {expense.vendor && (
                         <p className="text-xs text-zinc-500 mt-1">{expense.vendor}</p>
                       )}

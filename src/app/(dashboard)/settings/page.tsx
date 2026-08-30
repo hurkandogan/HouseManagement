@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { getCategories, createCategory, updateCategory, deleteCategory, Category } from "@/app/actions/categories";
 import { getTags, createTag, updateTag, deleteTag, Tag } from "@/app/actions/tags";
+import { useToast } from "@/lib/contexts/ToastContext";
 import { updateProfile, updatePassword as updateFirebasePassword } from "firebase/auth";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 
 export default function SettingsPage() {
   const { user } = useAuth();
+  const { showToast } = useToast();
   const [loading, setLoading] = useState(true);
 
   // Profile States
@@ -98,6 +100,7 @@ export default function SettingsPage() {
       setCatValue("");
       setCatLabel("");
       setCatColor("#ffffff");
+      setCatSaving(false);
     }
   };
 
@@ -113,9 +116,7 @@ export default function SettingsPage() {
     e.preventDefault();
     setCatSaving(true);
     try {
-      // Auto-generate value if empty
       const slug = catValue.trim() || catLabel.trim().toLowerCase().replace(/\s+/g, '-');
-      
       const data = {
         label: catLabel,
         value: slug,
@@ -124,15 +125,17 @@ export default function SettingsPage() {
 
       if (editingCatId) {
         await updateCategory(editingCatId, data);
+        showToast("Category updated successfully", "success");
       } else {
         await createCategory(data);
+        showToast("Category created successfully", "success");
       }
       
       await loadCategories();
       setCatOpen(false);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("Failed to save category.");
+      showToast(e?.message || "Failed to save category", "error");
     } finally {
       setCatSaving(false);
     }
@@ -157,6 +160,7 @@ export default function SettingsPage() {
       setTagValue("");
       setTagLabel("");
       setTagColor("#ffffff");
+      setTagSaving(false);
     }
   };
 
@@ -177,15 +181,17 @@ export default function SettingsPage() {
 
       if (editingTagId) {
         await updateTag(editingTagId, data);
+        showToast("Tag updated successfully", "success");
       } else {
         await createTag(data);
+        showToast("Tag created successfully", "success");
       }
       
       await loadTags();
       setTagOpen(false);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      alert("Failed to save tag.");
+      showToast(e?.message || "Failed to save tag", "error");
     } finally {
       setTagSaving(false);
     }

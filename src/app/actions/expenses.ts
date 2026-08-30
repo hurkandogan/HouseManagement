@@ -98,6 +98,7 @@ export async function createExpense(formData: FormData) {
     try {
       await appendExpenseToGoogleSheet({
         propertyId,
+        category,
         date,
         vendor,
         title,
@@ -188,6 +189,7 @@ export async function updateExpense(id: string, formData: FormData, oldDocumentU
     try {
       await appendExpenseToGoogleSheet({
         propertyId,
+        category,
         date,
         vendor,
         title,

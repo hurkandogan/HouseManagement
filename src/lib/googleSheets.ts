@@ -1,8 +1,10 @@
 import { google } from "googleapis";
 import { getPropertyById } from "@/app/actions/properties";
+import { getCategories } from "@/app/actions/categories";
 
 export type SheetExpenseItem = {
   propertyId: string;
+  category?: string | null;
   date: string;
   vendor?: string | null;
   title: string; // description
@@ -23,11 +25,7 @@ function formatDateDDMMYYYY(dateStr: string): string {
 
 export async function appendExpenseToGoogleSheet(expense: SheetExpenseItem) {
   try {
-    const spreadsheetId = process.env.GOOGLE_SHEET_ID;
-    if (!spreadsheetId) {
-      console.warn("GOOGLE_SHEET_ID is not configured. Skipping Google Sheet append.");
-      return { success: false, error: "GOOGLE_SHEET_ID not set" };
-    }
+    const spreadsheetId = process.env.GOOGLE_SHEET_ID || "1qcCil-BnTCaIg744tUG8s44k-Is3k3IJchSJFJo-YAA";
 
     const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
     const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, "\n");
@@ -54,11 +52,26 @@ export async function appendExpenseToGoogleSheet(expense: SheetExpenseItem) {
       }
     }
 
+    // Fetch category label
+    let categoryLabel = expense.category || "";
+    if (expense.category) {
+      try {
+        const categories = await getCategories();
+        const found = categories.find((c) => c.value === expense.category);
+        if (found) {
+          categoryLabel = found.label;
+        }
+      } catch (err) {
+        console.error("Failed to fetch categories for sheet sync:", err);
+      }
+    }
+
     const formattedDate = formatDateDDMMYYYY(expense.date);
     const linkValue = expense.documentUrl || "";
 
     const rowData = [
       propertyName,           // immobilien
+      categoryLabel,          // category (between immobilien and date)
       formattedDate,          // date (DD.MM.YYYY)
       expense.vendor || "",   // vendor
       expense.title || "",    // description
@@ -66,10 +79,10 @@ export async function appendExpenseToGoogleSheet(expense: SheetExpenseItem) {
       linkValue               // link
     ];
 
-    // Find the first empty row inside the formatted table
+    // Find the first empty row inside the formatted table (A:G)
     const getRes = await sheets.spreadsheets.values.get({
       spreadsheetId,
-      range: "A1:F500",
+      range: "A1:G500",
     });
 
     const existingRows = getRes.data.values || [];
@@ -89,7 +102,7 @@ export async function appendExpenseToGoogleSheet(expense: SheetExpenseItem) {
       // Fill the first empty row inside table
       await sheets.spreadsheets.values.update({
         spreadsheetId,
-        range: `A${targetRowIndex}:F${targetRowIndex}`,
+        range: `A${targetRowIndex}:G${targetRowIndex}`,
         valueInputOption: "USER_ENTERED",
         requestBody: {
           values: [rowData],
@@ -100,7 +113,7 @@ export async function appendExpenseToGoogleSheet(expense: SheetExpenseItem) {
       // Append to bottom if table has no pre-allocated empty rows
       await sheets.spreadsheets.values.append({
         spreadsheetId,
-        range: "A:F",
+        range: "A:G",
         valueInputOption: "USER_ENTERED",
         requestBody: {
           values: [rowData],

@@ -4,7 +4,6 @@ import { useEffect, useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { getPropertyById, Property } from "@/app/actions/properties";
 import { getExpenses, Expense } from "@/app/actions/expenses";
-import { getContracts, Contract } from "@/app/actions/contracts";
 import { getCategories, Category } from "@/app/actions/categories";
 import { getDocuments, Document } from "@/app/actions/documents";
 import { useYear } from "@/lib/contexts/YearContext";
@@ -25,7 +24,6 @@ export default function PropertyDashboardPage() {
 
   const [property, setProperty] = useState<Property | null>(null);
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [contracts, setContracts] = useState<Contract[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [documents, setDocuments] = useState<Document[]>([]);
   const [loading, setLoading] = useState(true);
@@ -34,17 +32,15 @@ export default function PropertyDashboardPage() {
     async function loadData() {
       try {
         setLoading(true);
-        const [prop, allExps, allConts, cats, allDocs] = await Promise.all([
+        const [prop, allExps, cats, allDocs] = await Promise.all([
           getPropertyById(id),
           getExpenses(),
-          getContracts(),
           getCategories(),
           getDocuments()
         ]);
         
         setProperty(prop);
         setExpenses(allExps.filter(e => e.propertyId === id));
-        setContracts(allConts.filter(c => c.propertyId === id));
         setCategories(cats);
         setDocuments(allDocs.filter(d => d.propertyId === id));
       } catch (error) {
@@ -63,16 +59,6 @@ export default function PropertyDashboardPage() {
       return new Date(e.date).getFullYear() === selectedYear;
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [expenses, selectedYear]);
-
-  const activeContracts = useMemo(() => {
-    return contracts.filter(c => {
-      if (c.status !== "active") return false;
-      // Filter based on whether it is active during this year
-      const startYear = new Date(c.startDate).getFullYear();
-      const endYear = c.endDate ? new Date(c.endDate).getFullYear() : 9999;
-      return selectedYear >= startYear && selectedYear <= endYear;
-    });
-  }, [contracts, selectedYear]);
 
   const totalExpenses = yearExpenses.reduce((sum, e) => sum + e.amount, 0);
 
@@ -159,12 +145,12 @@ export default function PropertyDashboardPage() {
 
         <Card className="bg-zinc-900/50 backdrop-blur-md border-white/10 p-6 flex flex-col justify-between">
           <div>
-            <p className="text-zinc-400 font-medium mb-1">Active Contracts</p>
-            <h3 className="text-4xl font-bold text-white tracking-tight">{activeContracts.length}</h3>
+            <p className="text-zinc-400 font-medium mb-1">Property Documents</p>
+            <h3 className="text-4xl font-bold text-white tracking-tight">{documents.length}</h3>
           </div>
-          <div className="mt-4 flex items-center text-xs text-emerald-400 font-medium">
-            <FileText className="h-4 w-4 mr-1.5" />
-            Currently valid in {selectedYear}
+          <div className="mt-4 flex items-center text-xs text-sky-400 font-medium">
+            <Folder className="h-4 w-4 mr-1.5" />
+            Attached files & agreements
           </div>
         </Card>
       </div>

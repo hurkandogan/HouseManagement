@@ -3,10 +3,10 @@
 import React, { useEffect, useState } from "react";
 import { useYear } from "@/lib/contexts/YearContext";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, Receipt, FileText, TrendingUp, Loader2 } from "lucide-react";
+import { Building2, Receipt, FileText, TrendingUp, Loader2, Folder } from "lucide-react";
 import { getExpenses, Expense } from "@/app/actions/expenses";
 import { getProperties, Property } from "@/app/actions/properties";
-import { getContracts, Contract } from "@/app/actions/contracts";
+import { getDocuments, Document } from "@/app/actions/documents";
 import { getCategories, Category } from "@/app/actions/categories";
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 import { format } from "date-fns";
@@ -17,22 +17,22 @@ export default function DashboardPage() {
   
   const [properties, setProperties] = useState<Property[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [contracts, setContracts] = useState<Contract[]>([]);
+  const [documents, setDocuments] = useState<Document[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
 
   useEffect(() => {
     async function loadData() {
       setLoading(true);
       try {
-        const [props, exps, conts, cats] = await Promise.all([
+        const [props, exps, docs, cats] = await Promise.all([
           getProperties(),
           getExpenses(),
-          getContracts(),
+          getDocuments(),
           getCategories()
         ]);
         setProperties(props);
         setExpenses(exps);
-        setContracts(conts);
+        setDocuments(docs);
         setCategories(cats);
       } catch (error) {
         console.error("Failed to load dashboard data", error);
@@ -44,12 +44,10 @@ export default function DashboardPage() {
   }, []);
 
   // Filter data for the selected year
-  // For Expenses: we check if the expense date string starts with the year
   const yearExpenses = expenses.filter(exp => !exp.isArchived && exp.date.startsWith(selectedYear));
   
   // Calculate Totals
   const totalExpenses = yearExpenses.reduce((sum, exp) => sum + exp.amount, 0);
-  const activeContractsCount = contracts.filter(c => c.status === "active").length;
 
   // Process Monthly Data for Bar Chart
   const monthlyData = Array.from({ length: 12 }, (_, i) => ({
@@ -158,19 +156,19 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        {/* Contracts Card */}
+        {/* Documents Card */}
         <Card className="bg-zinc-900/50 backdrop-blur-sm border-white/5 shadow-xl relative overflow-hidden group">
-          <div className="absolute top-0 right-0 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-transform group-hover:scale-110"></div>
+          <div className="absolute top-0 right-0 w-32 h-32 bg-sky-500/10 rounded-full blur-3xl -mr-10 -mt-10 transition-transform group-hover:scale-110"></div>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-zinc-300">Active Contracts</CardTitle>
-            <div className="h-8 w-8 rounded-lg bg-amber-500/10 flex items-center justify-center border border-amber-500/20">
-              <FileText className="h-4 w-4 text-amber-400" />
+            <CardTitle className="text-sm font-medium text-zinc-300">Total Documents</CardTitle>
+            <div className="h-8 w-8 rounded-lg bg-sky-500/10 flex items-center justify-center border border-sky-500/20">
+              <Folder className="h-4 w-4 text-sky-400" />
             </div>
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-white mb-1">{activeContractsCount}</div>
+            <div className="text-3xl font-bold text-white mb-1">{documents.length}</div>
             <p className="text-xs text-zinc-500">
-              Service & insurance agreements
+              Invoices & property files
             </p>
           </CardContent>
         </Card>

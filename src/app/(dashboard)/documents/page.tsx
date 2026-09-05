@@ -18,8 +18,6 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { format } from "date-fns";
-import { storage } from "@/lib/firebase/client";
-import { ref, uploadBytes, getDownloadURL, deleteObject } from "firebase/storage";
 import { useYear } from "@/lib/contexts/YearContext";
 import { useToast } from "@/lib/contexts/ToastContext";
 import { 
@@ -93,26 +91,20 @@ export default function DocumentsPage() {
 
     setUploading(true);
     try {
-      const fileExt = file.name.split('.').pop();
-      const fileName = `${Date.now()}-${Math.random().toString(36).substring(7)}.${fileExt}`;
-      const storageRef = ref(storage, `documents/${fileName}`);
-      
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
+      const formData = new FormData();
+      formData.append("title", title);
+      formData.append("propertyId", propertyId);
+      formData.append("file", file);
 
-      await createDocument({
-        title,
-        propertyId: propertyId === "general" ? null : propertyId,
-        fileUrl: url,
-        fileName: file.name,
-        fileType: file.type || "application/octet-stream",
-        size: file.size
-      });
-
-      showToast("Document uploaded successfully", "success");
-      setOpen(false);
-      resetForm();
-      loadData();
+      const result = await createDocument(formData);
+      if (result.success) {
+        showToast("Document uploaded successfully", "success");
+        setOpen(false);
+        resetForm();
+        loadData();
+      } else {
+        showToast(result.error || "Failed to upload document", "error");
+      }
     } catch (error: any) {
       console.error("Upload failed", error);
       showToast(error?.message || "Failed to upload document", "error");
@@ -125,9 +117,13 @@ export default function DocumentsPage() {
     if (!docToDelete) return;
     
     try {
-      await deleteDocument(docToDelete.id);
-      showToast("Document deleted successfully", "success");
-      loadData();
+      const res = await deleteDocument(docToDelete.id);
+      if (res.success) {
+        showToast("Document deleted successfully", "success");
+        loadData();
+      } else {
+        showToast(res.error || "Failed to delete document", "error");
+      }
     } catch (error: any) {
       console.error(error);
       showToast(error?.message || "Failed to delete document", "error");

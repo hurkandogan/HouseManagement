@@ -4,7 +4,7 @@ import { ReactNode } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
-import { Home, Building2, Receipt, FileSignature, Settings, Menu, LogOut, Folder } from "lucide-react";
+import { Home, Building2, Receipt, Settings, Menu, LogOut, Folder } from "lucide-react";
 import { useAuth } from "@/lib/contexts/AuthContext";
 import { useYear } from "@/lib/contexts/YearContext";
 import { Button } from "@/components/ui/button";
@@ -13,7 +13,6 @@ const navigation = [
   { name: "Overview", href: "/", icon: Home },
   { name: "Properties", href: "/properties", icon: Building2 },
   { name: "Expenses", href: "/expenses", icon: Receipt },
-  { name: "Contracts", href: "/contracts", icon: FileSignature },
   { name: "Documents", href: "/documents", icon: Folder },
   { name: "Settings", href: "/settings", icon: Settings },
 ];

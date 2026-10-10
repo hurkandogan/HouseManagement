@@ -5,6 +5,7 @@ import { getExpenses, createExpense, updateExpense, deleteExpense, Expense } fro
 import { getCategories, Category } from "@/app/actions/categories";
 import { getProperties, Property } from "@/app/actions/properties";
 import { getTags, createTag, Tag as TagModel } from "@/app/actions/tags";
+import { getSignedUploadUrl } from "@/app/actions/documents";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -199,7 +200,26 @@ export default function ExpensesPage() {
       }
 
       if (file) {
-        formData.append("file", file);
+        // Direct upload to GCS via Signed URL to bypass 32MB payload limit
+        const signedRes = await getSignedUploadUrl("expenses", file.name, file.type || "application/octet-stream");
+        if (!signedRes.success || !signedRes.uploadUrl || !signedRes.downloadUrl) {
+          throw new Error(signedRes.error || "Failed to prepare file upload.");
+        }
+
+        const uploadRes = await fetch(signedRes.uploadUrl, {
+          method: "PUT",
+          headers: {
+            "Content-Type": file.type || "application/octet-stream",
+          },
+          body: file,
+        });
+
+        if (!uploadRes.ok) {
+          throw new Error(`Direct file upload failed (Status ${uploadRes.status}).`);
+        }
+
+        formData.append("documentUrl", signedRes.downloadUrl);
+        formData.append("fileName", file.name);
       }
       if (oldFileName) {
         formData.append("oldFileName", oldFileName);

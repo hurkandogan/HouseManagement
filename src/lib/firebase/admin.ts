@@ -5,12 +5,17 @@ import { getStorage } from 'firebase-admin/storage';
 
 let app: App;
 
+const BUCKET_NAME = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 
+  process.env.FIREBASE_STORAGE_BUCKET || 
+  "housemanagement-7902d.firebasestorage.app";
+
 if (!getApps().length) {
   try {
     // In Firebase App Hosting, FIREBASE_CONFIG is automatically set.
-    // If it exists, we can rely on it and Application Default Credentials.
     if (process.env.FIREBASE_CONFIG) {
-      app = initializeApp();
+      app = initializeApp({
+        storageBucket: BUCKET_NAME
+      });
     } else {
       // Local development fallback using explicit environment variables
       const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
@@ -21,7 +26,7 @@ if (!getApps().length) {
           clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
           privateKey: privateKey,
         }),
-        storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+        storageBucket: BUCKET_NAME,
       });
     }
   } catch (error) {
@@ -39,4 +44,4 @@ if (!getApps().length) {
 
 export const adminDb = getFirestore(app);
 export const adminAuth = getAuth(app);
-export const adminStorage = getStorage(app).bucket();
+export const adminStorage = getStorage(app).bucket(BUCKET_NAME);

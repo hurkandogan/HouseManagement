@@ -41,12 +41,11 @@ export async function createExpense(formData: FormData) {
     const tags = tagsStr ? JSON.parse(tagsStr) : [];
     const vendor = formData.get("vendor") as string | null;
     const contractId = formData.get("contractId") as string | null;
+    let documentUrl = (formData.get("documentUrl") as string | null) || null;
+    let fileName = (formData.get("fileName") as string | null) || null;
     const file = formData.get("file") as File | null;
 
-    let documentUrl = null;
-    let fileName = null;
-
-    if (file && file.size > 0) {
+    if (!documentUrl && file && file.size > 0) {
       fileName = file.name;
       const buffer = Buffer.from(await file.arrayBuffer());
       const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
@@ -59,9 +58,6 @@ export async function createExpense(formData: FormData) {
         }
       });
       
-      // Make it public
-      // Note: We don't use makePublic() because it fails on buckets with uniform bucket-level access enabled.
-      // Instead, we use getDownloadURL which generates a Firebase Storage URL.
       documentUrl = await getDownloadURL(storageFile);
     }
 
@@ -112,7 +108,7 @@ export async function createExpense(formData: FormData) {
     return { success: true, id: docRef.id };
   } catch (error) {
     console.error("Error creating expense:", error);
-    return { success: false, error: "Failed to create expense." };
+    return { success: false, error: error instanceof Error ? error.message : "Failed to create expense." };
   }
 }
 
@@ -129,11 +125,11 @@ export async function updateExpense(id: string, formData: FormData, oldDocumentU
     const contractId = formData.get("contractId") as string | null;
     const file = formData.get("file") as File | null;
 
-    let documentUrl = oldDocumentUrl || null;
-    let fileName = formData.get("oldFileName") as string | null;
+    let documentUrl = (formData.get("documentUrl") as string | null) || oldDocumentUrl || null;
+    let fileName = (formData.get("fileName") as string | null) || (formData.get("oldFileName") as string | null) || null;
 
     // If there's a new file, upload it
-    if (file && file.size > 0) {
+    if (!formData.get("documentUrl") && file && file.size > 0) {
       fileName = file.name;
       const buffer = Buffer.from(await file.arrayBuffer());
       const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;

@@ -15,6 +15,33 @@ export interface Document {
   uploadedAt: string;
 }
 
+/**
+ * Generates a signed upload URL to allow direct browser uploads to Google Cloud Storage.
+ * Bypasses Cloud Run / Next.js Server Action 32MB payload limit for large files (e.g. 50MB+ PDFs).
+ */
+export async function getSignedUploadUrl(folder: "expenses" | "documents", fileName: string, contentType: string) {
+  try {
+    const cleanFileName = fileName.replace(/[^a-zA-Z0-9_.-]/g, "_");
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    const filePath = `${folder}/${uniqueSuffix}-${cleanFileName}`;
+    const file = adminStorage.file(filePath);
+
+    const [uploadUrl] = await file.getSignedUrl({
+      version: "v4",
+      action: "write",
+      expires: Date.now() + 15 * 60 * 1000, // 15 minutes
+      contentType: contentType || "application/octet-stream",
+    });
+
+    const downloadUrl = await getDownloadURL(file);
+
+    return { success: true, uploadUrl, downloadUrl, fileName: cleanFileName, filePath };
+  } catch (error: any) {
+    console.error("Error generating signed upload URL:", error);
+    return { success: false, error: error?.message || "Failed to prepare file upload." };
+  }
+}
+
 export async function getDocuments(): Promise<Document[]> {
   try {
     const snapshot = await adminDb.collection("documents").orderBy("uploadedAt", "desc").get();
@@ -33,33 +60,45 @@ export async function createDocument(formData: FormData) {
     const title = formData.get("title") as string;
     const rawPropertyId = formData.get("propertyId") as string | null;
     const propertyId = rawPropertyId === "general" || !rawPropertyId ? null : rawPropertyId;
+
+    let fileUrl = formData.get("fileUrl") as string | null;
+    let fileName = formData.get("fileName") as string | null;
+    let fileType = (formData.get("fileType") as string) || "application/octet-stream";
+    let size = parseInt((formData.get("size") as string) || "0", 10);
+
     const file = formData.get("file") as File | null;
 
-    if (!file || file.size === 0 || !title) {
-      return { success: false, error: "Please provide a document title and select a file." };
+    // If pre-uploaded directly to GCS via Signed URL
+    if (!fileUrl && file && file.size > 0) {
+      fileName = file.name;
+      fileType = file.type || "application/octet-stream";
+      size = file.size;
+
+      const buffer = Buffer.from(await file.arrayBuffer());
+      const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+      const filePath = `documents/${uniqueSuffix}-${fileName}`;
+
+      const storageFile = adminStorage.file(filePath);
+      await storageFile.save(buffer, {
+        metadata: {
+          contentType: fileType,
+        }
+      });
+
+      fileUrl = await getDownloadURL(storageFile);
     }
 
-    const fileName = file.name;
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    const filePath = `documents/${uniqueSuffix}-${fileName}`;
-
-    const storageFile = adminStorage.file(filePath);
-    await storageFile.save(buffer, {
-      metadata: {
-        contentType: file.type || "application/octet-stream",
-      }
-    });
-
-    const fileUrl = await getDownloadURL(storageFile);
+    if (!fileUrl || !title) {
+      return { success: false, error: "Please provide a document title and select a file." };
+    }
 
     const docRef = await adminDb.collection("documents").add({
       title,
       propertyId,
       fileUrl,
-      fileName,
-      fileType: file.type || "application/octet-stream",
-      size: file.size,
+      fileName: fileName || "document",
+      fileType,
+      size,
       uploadedAt: new Date().toISOString()
     });
 

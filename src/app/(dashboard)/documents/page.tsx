@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { getDocuments, createDocument, deleteDocument, Document } from "@/app/actions/documents";
+import { getDocuments, createDocument, deleteDocument, getSignedUploadUrl, Document } from "@/app/actions/documents";
 import { getProperties, Property } from "@/app/actions/properties";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -91,10 +91,33 @@ export default function DocumentsPage() {
 
     setUploading(true);
     try {
+      // Step 1: Get signed upload URL from server (bypasses 32MB payload limit)
+      const signedRes = await getSignedUploadUrl("documents", file.name, file.type || "application/octet-stream");
+      if (!signedRes.success || !signedRes.uploadUrl || !signedRes.downloadUrl) {
+        throw new Error(signedRes.error || "Failed to prepare file upload.");
+      }
+
+      // Step 2: Upload directly to Google Cloud Storage via PUT
+      const uploadRes = await fetch(signedRes.uploadUrl, {
+        method: "PUT",
+        headers: {
+          "Content-Type": file.type || "application/octet-stream",
+        },
+        body: file,
+      });
+
+      if (!uploadRes.ok) {
+        throw new Error(`Direct file upload failed (Status ${uploadRes.status}).`);
+      }
+
+      // Step 3: Create document record with fileUrl
       const formData = new FormData();
       formData.append("title", title);
       formData.append("propertyId", propertyId);
-      formData.append("file", file);
+      formData.append("fileUrl", signedRes.downloadUrl);
+      formData.append("fileName", file.name);
+      formData.append("fileType", file.type || "application/octet-stream");
+      formData.append("size", file.size.toString());
 
       const result = await createDocument(formData);
       if (result.success) {

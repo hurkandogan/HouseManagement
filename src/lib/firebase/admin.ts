@@ -9,23 +9,25 @@ const BUCKET_NAME = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET ||
   process.env.FIREBASE_STORAGE_BUCKET || 
   "housemanagement-7902d.firebasestorage.app";
 
+const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
+const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+const projectId = process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "housemanagement-7902d";
+
 if (!getApps().length) {
   try {
-    // In Firebase App Hosting, FIREBASE_CONFIG is automatically set.
-    if (process.env.FIREBASE_CONFIG) {
-      app = initializeApp({
-        storageBucket: BUCKET_NAME
-      });
-    } else {
-      // Local development fallback using explicit environment variables
-      const privateKey = process.env.FIREBASE_PRIVATE_KEY?.replace(/\\n/g, '\n');
-      
+    if (clientEmail && privateKey) {
+      // Use explicit service account credentials when available (bypasses GCP IAM signBlob requirement)
       app = initializeApp({
         credential: cert({
-          projectId: process.env.FIREBASE_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-          clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
-          privateKey: privateKey,
+          projectId,
+          clientEmail,
+          privateKey,
         }),
+        storageBucket: BUCKET_NAME,
+      });
+    } else {
+      // Fallback for GCP managed ADC
+      app = initializeApp({
         storageBucket: BUCKET_NAME,
       });
     }
@@ -35,7 +37,7 @@ if (!getApps().length) {
     if (apps.length > 0) {
       app = apps[0];
     } else {
-      throw error; // Fail fast if initialization fails
+      throw error;
     }
   }
 } else {

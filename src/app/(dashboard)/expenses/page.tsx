@@ -200,26 +200,37 @@ export default function ExpensesPage() {
       }
 
       if (file) {
-        // Direct upload to GCS via Signed URL to bypass 32MB payload limit
-        const signedRes = await getSignedUploadUrl("expenses", file.name, file.type || "application/octet-stream");
-        if (!signedRes.success || !signedRes.uploadUrl || !signedRes.downloadUrl) {
-          throw new Error(signedRes.error || "Failed to prepare file upload.");
+        let uploadSuccess = false;
+        try {
+          // Direct upload to GCS via Signed URL to bypass 32MB payload limit
+          const signedRes = await getSignedUploadUrl("expenses", file.name, file.type || "application/octet-stream");
+          if (signedRes.success && signedRes.uploadUrl && signedRes.downloadUrl) {
+            const uploadRes = await fetch(signedRes.uploadUrl, {
+              method: "PUT",
+              headers: {
+                "Content-Type": file.type || "application/octet-stream",
+              },
+              body: file,
+            });
+
+            if (uploadRes.ok) {
+              uploadSuccess = true;
+              formData.append("documentUrl", signedRes.downloadUrl);
+              formData.append("fileName", file.name);
+              if (signedRes.filePath) formData.append("filePath", signedRes.filePath);
+              if (signedRes.downloadToken) formData.append("downloadToken", signedRes.downloadToken);
+            }
+          }
+        } catch (directErr) {
+          console.warn("Direct upload error for expense attachment, checking fallback:", directErr);
         }
 
-        const uploadRes = await fetch(signedRes.uploadUrl, {
-          method: "PUT",
-          headers: {
-            "Content-Type": file.type || "application/octet-stream",
-          },
-          body: file,
-        });
-
-        if (!uploadRes.ok) {
-          throw new Error(`Direct file upload failed (Status ${uploadRes.status}).`);
+        if (!uploadSuccess) {
+          if (file.size > 30 * 1024 * 1024) {
+            throw new Error("Direct upload failed and file exceeds 30MB limit.");
+          }
+          formData.append("file", file);
         }
-
-        formData.append("documentUrl", signedRes.downloadUrl);
-        formData.append("fileName", file.name);
       }
       if (oldFileName) {
         formData.append("oldFileName", oldFileName);

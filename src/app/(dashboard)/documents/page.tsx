@@ -91,33 +91,45 @@ export default function DocumentsPage() {
 
     setUploading(true);
     try {
-      // Step 1: Get signed upload URL from server (bypasses 32MB payload limit)
-      const signedRes = await getSignedUploadUrl("documents", file.name, file.type || "application/octet-stream");
-      if (!signedRes.success || !signedRes.uploadUrl || !signedRes.downloadUrl) {
-        throw new Error(signedRes.error || "Failed to prepare file upload.");
-      }
-
-      // Step 2: Upload directly to Google Cloud Storage via PUT
-      const uploadRes = await fetch(signedRes.uploadUrl, {
-        method: "PUT",
-        headers: {
-          "Content-Type": file.type || "application/octet-stream",
-        },
-        body: file,
-      });
-
-      if (!uploadRes.ok) {
-        throw new Error(`Direct file upload failed (Status ${uploadRes.status}).`);
-      }
-
-      // Step 3: Create document record with fileUrl
       const formData = new FormData();
       formData.append("title", title);
       formData.append("propertyId", propertyId);
-      formData.append("fileUrl", signedRes.downloadUrl);
-      formData.append("fileName", file.name);
-      formData.append("fileType", file.type || "application/octet-stream");
-      formData.append("size", file.size.toString());
+
+      let uploadSuccess = false;
+
+      // Attempt Direct GCS PUT Upload (bypasses 32MB payload limit for large files)
+      try {
+        const signedRes = await getSignedUploadUrl("documents", file.name, file.type || "application/octet-stream");
+        if (signedRes.success && signedRes.uploadUrl && signedRes.downloadUrl) {
+          const uploadRes = await fetch(signedRes.uploadUrl, {
+            method: "PUT",
+            headers: {
+              "Content-Type": file.type || "application/octet-stream",
+            },
+            body: file,
+          });
+
+          if (uploadRes.ok) {
+            uploadSuccess = true;
+            formData.append("fileUrl", signedRes.downloadUrl);
+            formData.append("fileName", file.name);
+            if (signedRes.filePath) formData.append("filePath", signedRes.filePath);
+            if (signedRes.downloadToken) formData.append("downloadToken", signedRes.downloadToken);
+            formData.append("fileType", file.type || "application/octet-stream");
+            formData.append("size", file.size.toString());
+          }
+        }
+      } catch (directErr) {
+        console.warn("Direct upload error, checking fallback:", directErr);
+      }
+
+      // Fallback: If direct upload failed and file is under 30MB, send file via Server Action
+      if (!uploadSuccess) {
+        if (file.size > 30 * 1024 * 1024) {
+          throw new Error("Direct upload failed and file exceeds 30MB limit.");
+        }
+        formData.append("file", file);
+      }
 
       const result = await createDocument(formData);
       if (result.success) {

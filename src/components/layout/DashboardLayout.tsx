@@ -37,7 +37,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
         <div className="h-24 flex items-center px-8 relative z-10">
           <div className="flex items-center gap-3">
             <div className="relative w-10 h-10 rounded-xl overflow-hidden shadow-lg shadow-indigo-500/20 border border-white/10">
-              <Image src="/logo.png" alt="Logo" fill className="object-cover" />
+              <Image src="/logo.png" alt="Logo" fill sizes="40px" className="object-cover" />
             </div>
             <div>
               <h1 className="text-xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400 tracking-tight">Hausverwaltung</h1>

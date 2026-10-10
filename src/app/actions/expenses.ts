@@ -1,8 +1,8 @@
 "use server";
 
 import { adminDb, adminStorage } from "@/lib/firebase/admin";
-import { getDownloadURL } from "firebase-admin/storage";
 import { appendExpenseToGoogleSheet } from "@/lib/googleSheets";
+import { v4 as uuidv4 } from "uuid";
 
 export type Expense = {
   id: string;
@@ -43,22 +43,40 @@ export async function createExpense(formData: FormData) {
     const contractId = formData.get("contractId") as string | null;
     let documentUrl = (formData.get("documentUrl") as string | null) || null;
     let fileName = (formData.get("fileName") as string | null) || null;
+    let filePath = formData.get("filePath") as string | null;
+    let downloadToken = formData.get("downloadToken") as string | null;
     const file = formData.get("file") as File | null;
+
+    if (filePath && downloadToken) {
+      try {
+        await adminStorage.file(filePath).setMetadata({
+          metadata: {
+            firebaseStorageDownloadTokens: downloadToken,
+          }
+        });
+      } catch (metaErr) {
+        console.error("Error setting download token metadata for expense:", metaErr);
+      }
+    }
 
     if (!documentUrl && file && file.size > 0) {
       fileName = file.name;
       const buffer = Buffer.from(await file.arrayBuffer());
       const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-      const filePath = `expenses/${uniqueSuffix}-${fileName}`;
+      const newFilePath = `expenses/${uniqueSuffix}-${fileName}`;
       
-      const storageFile = adminStorage.file(filePath);
+      const storageFile = adminStorage.file(newFilePath);
+      const token = uuidv4();
       await storageFile.save(buffer, {
         metadata: {
           contentType: file.type,
+          metadata: {
+            firebaseStorageDownloadTokens: token,
+          }
         }
       });
       
-      documentUrl = await getDownloadURL(storageFile);
+      documentUrl = `https://firebasestorage.googleapis.com/v0/b/${adminStorage.name}/o/${encodeURIComponent(newFilePath)}?alt=media&token=${token}`;
     }
 
     const expenseData: Omit<Expense, "id" | "createdAt"> = {
@@ -72,10 +90,6 @@ export async function createExpense(formData: FormData) {
       tags,
       isArchived: false
     };
-
-    if (vendor) {
-      expenseData.vendor = vendor;
-    }
 
     if (vendor) {
       expenseData.vendor = vendor;
@@ -127,23 +141,54 @@ export async function updateExpense(id: string, formData: FormData, oldDocumentU
 
     let documentUrl = (formData.get("documentUrl") as string | null) || oldDocumentUrl || null;
     let fileName = (formData.get("fileName") as string | null) || (formData.get("oldFileName") as string | null) || null;
+    let filePath = formData.get("filePath") as string | null;
+    let downloadToken = formData.get("downloadToken") as string | null;
 
-    // If there's a new file, upload it
+    if (filePath && downloadToken) {
+      try {
+        await adminStorage.file(filePath).setMetadata({
+          metadata: {
+            firebaseStorageDownloadTokens: downloadToken,
+          }
+        });
+      } catch (metaErr) {
+        console.error("Error setting download token metadata for updated expense:", metaErr);
+      }
+    }
+
+    // If a new documentUrl was provided via direct upload, delete old file if it exists
+    if (formData.get("documentUrl") && oldDocumentUrl) {
+      const urlObj = new URL(oldDocumentUrl);
+      const bucketPrefix = `/${adminStorage.name}/`;
+      const oldFilePath = decodeURIComponent(urlObj.pathname.startsWith(bucketPrefix) 
+        ? urlObj.pathname.slice(bucketPrefix.length) 
+        : urlObj.pathname.slice(1));
+      try {
+        await adminStorage.file(oldFilePath).delete();
+      } catch (e) {
+        console.error("Error deleting old file:", e);
+      }
+    }
+
+    // If there's a new file and no direct documentUrl, upload via server fallback
     if (!formData.get("documentUrl") && file && file.size > 0) {
       fileName = file.name;
       const buffer = Buffer.from(await file.arrayBuffer());
       const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-      const filePath = `expenses/${uniqueSuffix}-${fileName}`;
+      const newFilePath = `expenses/${uniqueSuffix}-${fileName}`;
       
-      const storageFile = adminStorage.file(filePath);
+      const storageFile = adminStorage.file(newFilePath);
+      const token = uuidv4();
       await storageFile.save(buffer, {
         metadata: {
           contentType: file.type,
+          metadata: {
+            firebaseStorageDownloadTokens: token,
+          }
         }
       });
       
-      // We don't use makePublic() because it fails on buckets with uniform bucket-level access enabled.
-      documentUrl = await getDownloadURL(storageFile);
+      documentUrl = `https://firebasestorage.googleapis.com/v0/b/${adminStorage.name}/o/${encodeURIComponent(newFilePath)}?alt=media&token=${token}`;
 
       // Delete the old file if it exists
       if (oldDocumentUrl) {
